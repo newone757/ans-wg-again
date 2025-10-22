@@ -1,0 +1,55 @@
+---
+# File: inventory.yml
+all:
+  children:
+    wireguard_servers:
+      children:
+        origin_servers:
+          hosts:
+            origin1:
+              ansible_host: 192.0.2.10
+              ansible_port: 2222
+              ansible_user: admin1
+              ansible_ssh_private_key_file: ~/.ssh/origin1_key
+              wireguard_ip: 10.0.0.1
+              wireguard_port: 51820
+              
+            origin2:
+              ansible_host: 192.0.2.11
+              ansible_port: 2223
+              ansible_user: admin2
+              ansible_ssh_private_key_file: ~/.ssh/origin2_key
+              wireguard_ip: 10.0.0.2
+              wireguard_port: 51821
+        
+        frontend_servers:
+          hosts:
+            frontend1:
+              ansible_host: 192.0.2.20
+              ansible_port: 2224
+              ansible_user: admin3
+              ansible_ssh_private_key_file: ~/.ssh/frontend1_key
+              wireguard_ip: 10.0.0.11
+              wireguard_port: 51822
+              
+            frontend2:
+              ansible_host: 192.0.2.21
+              ansible_port: 2225
+              ansible_user: admin4
+              ansible_ssh_private_key_file: ~/.ssh/frontend2_key
+              wireguard_ip: 10.0.0.12
+              wireguard_port: 51823
+              
+            frontend3:
+              ansible_host: 192.0.2.22
+              ansible_port: 2226
+              ansible_user: admin5
+              ansible_ssh_private_key_file: ~/.ssh/frontend3_key
+              wireguard_ip: 10.0.0.13
+              wireguard_port: 51824
+          
+      vars:
+        ansible_python_interpreter: /usr/bin/python3
+        ansible_become_method: sudo
+        # Become password will be read from vault using host-specific variable
+        ansible_become_password: "{{ vault_become_passwords[inventory_hostname] }}"

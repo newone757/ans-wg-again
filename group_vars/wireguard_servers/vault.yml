@@ -1,0 +1,7 @@
+---
+vault_become_passwords:
+  origin1: "origin1_sudo_password_here"
+  origin2: "origin2_sudo_password_here"
+  frontend1: "frontend1_sudo_password_here"
+  frontend2: "frontend2_sudo_password_here"
+  frontend3: "frontend3_sudo_password_here"

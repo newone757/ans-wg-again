@@ -1,0 +1,146 @@
+---
+# File: playbook.yml
+- name: Install and Configure WireGuard on Ubuntu Servers
+  hosts: wireguard_servers
+  become: yes
+  vars:
+    wireguard_interface: wg0
+    wireguard_network: "10.0.0.0/24"
+    
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install WireGuard
+      apt:
+        name:
+          - wireguard
+          - wireguard-tools
+        state: present
+
+    - name: Ensure WireGuard directory exists
+      file:
+        path: /etc/wireguard
+        state: directory
+        mode: '0700'
+
+    - name: Check if private key exists
+      stat:
+        path: /etc/wireguard/privatekey
+      register: privatekey_file
+
+    - name: Generate WireGuard private key
+      shell: wg genkey > /etc/wireguard/privatekey
+      when: not privatekey_file.stat.exists
+
+    - name: Set private key permissions
+      file:
+        path: /etc/wireguard/privatekey
+        mode: '0600'
+
+    - name: Generate WireGuard public key
+      shell: cat /etc/wireguard/privatekey | wg pubkey > /etc/wireguard/publickey
+      when: not privatekey_file.stat.exists
+
+    - name: Read private key
+      slurp:
+        src: /etc/wireguard/privatekey
+      register: wg_private_key
+
+    - name: Read public key
+      slurp:
+        src: /etc/wireguard/publickey
+      register: wg_public_key
+
+    - name: Store public key as fact
+      set_fact:
+        wireguard_public_key: "{{ wg_public_key.content | b64decode | trim }}"
+
+- name: Gather WireGuard public keys from all servers
+  hosts: wireguard_servers
+  tasks:
+    - name: Create dictionary of all server keys
+      set_fact:
+        all_wireguard_keys: "{{ all_wireguard_keys | default({}) | combine({item: hostvars[item].wireguard_public_key}) }}"
+      loop: "{{ groups['wireguard_servers'] }}"
+      run_once: true
+
+    - name: Create dictionary of origin server keys
+      set_fact:
+        origin_wireguard_keys: "{{ origin_wireguard_keys | default({}) | combine({item: hostvars[item].wireguard_public_key}) }}"
+      loop: "{{ groups['origin_servers'] }}"
+      run_once: true
+
+    - name: Create dictionary of frontend server keys
+      set_fact:
+        frontend_wireguard_keys: "{{ frontend_wireguard_keys | default({}) | combine({item: hostvars[item].wireguard_public_key}) }}"
+      loop: "{{ groups['frontend_servers'] }}"
+      run_once: true
+
+- name: Configure WireGuard with proper peering
+  hosts: wireguard_servers
+  become: yes
+  vars:
+    wireguard_interface: wg0
+  tasks:
+    - name: Determine peer configuration for this host
+      set_fact:
+        # Origin servers peer with all other servers
+        wireguard_peers: >-
+          {% if inventory_hostname in groups['origin_servers'] %}
+            {{ groups['wireguard_servers'] | difference([inventory_hostname]) }}
+          {% else %}
+            {{ groups['origin_servers'] }}
+          {% endif %}
+
+    - name: Display peering configuration
+      debug:
+        msg: "{{ inventory_hostname }} will peer with: {{ wireguard_peers }}"
+
+    - name: Create WireGuard configuration file
+      template:
+        src: templates/wg0.conf.j2
+        dest: /etc/wireguard/{{ wireguard_interface }}.conf
+        mode: '0600'
+      notify: restart wireguard
+
+    - name: Enable IP forwarding
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        sysctl_set: yes
+        state: present
+        reload: yes
+
+    - name: Configure UFW to allow WireGuard port
+      ufw:
+        rule: allow
+        port: "{{ wireguard_port }}"
+        proto: udp
+      when: ansible_facts.services['ufw.service'] is defined
+
+    - name: Configure UFW to allow forwarding
+      lineinfile:
+        path: /etc/default/ufw
+        regexp: '^DEFAULT_FORWARD_POLICY='
+        line: 'DEFAULT_FORWARD_POLICY="ACCEPT"'
+      when: ansible_facts.services['ufw.service'] is defined
+      notify: reload ufw
+
+    - name: Enable and start WireGuard
+      systemd:
+        name: wg-quick@{{ wireguard_interface }}
+        enabled: yes
+        state: started
+
+  handlers:
+    - name: restart wireguard
+      systemd:
+        name: wg-quick@{{ wireguard_interface }}
+        state: restarted
+
+    - name: reload ufw
+      ufw:
+        state: reloaded

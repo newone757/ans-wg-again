@@ -1,0 +1,25 @@
+# File: templates/wg0.conf.j2
+[Interface]
+Address = {{ wireguard_ip }}/24
+ListenPort = {{ wireguard_port }}
+PrivateKey = {{ wg_private_key.content | b64decode | trim }}
+
+# PostUp and PostDown rules for NAT
+PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o {{ ansible_default_ipv4.interface }} -j MASQUERADE
+PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o {{ ansible_default_ipv4.interface }} -j MASQUERADE
+
+# Peer Configurations
+# Topology: {% if inventory_hostname in groups['origin_servers'] %}Origin (peers with all servers){% else %}Frontend (peers with origin only){% endif %}
+
+{% for peer in wireguard_peers %}
+# Peer: {{ peer }} ({{ 'Origin' if peer in groups['origin_servers'] else 'Frontend' }})
+[Peer]
+PublicKey = {{ hostvars[peer].wireguard_public_key }}
+AllowedIPs = {{ hostvars[peer].wireguard_ip }}/32
+{% if inventory_hostname in groups['frontend_servers'] %}
+# Frontend connecting to origin - need endpoint
+Endpoint = {{ hostvars[peer].ansible_host }}:{{ hostvars[peer].wireguard_port }}
+PersistentKeepalive = 25
+{% endif %}
+
+{% endfor %}
