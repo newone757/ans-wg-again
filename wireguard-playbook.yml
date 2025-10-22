@@ -58,6 +58,22 @@
       set_fact:
         wireguard_public_key: "{{ wg_public_key.content | b64decode | trim }}"
 
+    - name: Backup keys to control machine
+      fetch:
+        src: /etc/wireguard/{{ item }}
+        dest: ./wireguard-keys/{{ inventory_hostname }}/
+        flat: yes
+      loop:
+        - privatekey
+        - publickey
+
+    - name: Set restrictive permissions on backed up private keys
+      local_action:
+        module: file
+        path: ./wireguard-keys/{{ inventory_hostname }}/privatekey
+        mode: '0600'
+      become: no
+
 - name: Gather WireGuard public keys from all servers
   hosts: wireguard_servers
   tasks:

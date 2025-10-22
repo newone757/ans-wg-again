@@ -11,7 +11,15 @@ wireguard-ansible/
 │       └── vault.yml
 ├── templates/
 │   └── wg0.conf.j2
-└── ansible.cfg
+├── ansible.cfg
+└── wireguard-keys/          # Created automatically - backed up keys
+    ├── origin1/
+    │   ├── privatekey
+    │   └── publickey
+    ├── frontend1/
+    │   ├── privatekey
+    │   └── publickey
+    └── ...
 ```
 
 ## Network Topology
@@ -180,7 +188,9 @@ ansible frontend1 -m shell -a "ping -c 3 10.0.0.1" --ask-vault-pass
 ## Security Notes
 
 - Each server generates its own private/public key pair
-- Private keys never leave their respective servers
+- Private keys never leave their respective servers during generation
+- Keys are backed up to `./wireguard-keys/` on your control machine with restrictive permissions
+- **IMPORTANT**: Add `wireguard-keys/` to your `.gitignore` if using version control
 - SSH keys for each server should be unique and properly secured
 - The vault file contains sudo passwords - keep it secure
 - WireGuard ports are opened in UFW automatically
